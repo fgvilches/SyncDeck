@@ -19,6 +19,10 @@ class SyncDeck:
         self.os_label = tk.Label(root, text=f"Detected OS: {self.os_type}")
         self.os_label.pack()
 
+        # Button to initiate Cloud login
+        self.cloud_login_button = tk.Button(root, text="Login to Cloud", command=self.login_to_cloud)
+        self.cloud_login_button.pack(pady=5)
+
         self.add_game_frame = tk.Frame(root)
         self.add_game_frame.pack(pady=10)
 
@@ -171,6 +175,14 @@ class SyncDeck:
 
         sync_button = tk.Button(sync_direction_window, text="Sync", command=sync)
         sync_button.pack()
+
+    def login_to_cloud(self):
+        try:
+            # Running rclone config command to initiate Cloud configuration
+            subprocess.run(["rclone", "config"], check=True)
+            messagebox.showinfo("Login Successful", "Successfully logged in to Cloud.")
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Login Error", f"Error logging in to Cloud: {e.stderr.decode()}")
 
     def sync_folders(self, source, destination):
         if not os.path.exists(destination):
