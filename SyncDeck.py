@@ -2,11 +2,16 @@ import os
 import platform
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
-from tkinter import ttk  # Importing ttk module for Combobox
+from tkinter import ttk
 import json
 import shutil
 import subprocess
 import re
+from PIL import Image, ImageTk
+import win32api
+import win32con
+import win32gui
+import ctypes
 
 class RemoteBrowserDialog(tk.Toplevel):
     def __init__(self, parent, remote_name, dest_entry):
@@ -102,23 +107,9 @@ class SyncDeck:
         self.os_type = platform.system()
         self.os_label = tk.Label(root, text=f"Detected OS: {self.os_type}")
         self.os_label.pack()
-        # Inside the __init__ method of the SyncDeck class
-        #self.remote_label = tk.Label(root, text="Remote:")
-        #self.remote_label.pack()
 
-        # Initialize cloud_remote attribute
         self.cloud_remote = None
-
-        # Check for the existence of a remote when the application starts
         self.check_for_remote()
-
-        # Initialize the login button
-        #self.cloud_login_button = tk.Button(root, text="Login to Cloud", command=self.login_to_cloud)
-        #if self.cloud_remote:
-            # Hide the login button if a remote exists
-        #    self.cloud_login_button.pack_forget()
-        #else:
-        #    self.cloud_login_button.pack(pady=5)
 
         if self.remote_name:
             self.remote_label = tk.Label(root, text=f"Remote: {self.remote_name}")
@@ -147,6 +138,7 @@ class SyncDeck:
         self.add_button.pack(pady=5)
 
         self.games_list = tk.Listbox(root, width=80)
+        self.games_list.image_list = []  # Create an empty list to store image references
         self.games_list.pack(pady=10)
         self.games_list.bind('<Double-1>', self.load_game_for_editing)
 
@@ -159,19 +151,27 @@ class SyncDeck:
         self.load_games_into_listbox()
 
     def setup_windows_ui(self):
-        self.source_label = tk.Label(self.add_game_frame, text="Destination Folder:")
+        self.source_label = tk.Label(self.add_game_frame, text="Source Folder:")
         self.source_label.grid(row=1, column=0)
         self.source_entry = tk.Entry(self.add_game_frame, width=50)
         self.source_entry.grid(row=1, column=1)
-        self.browse_cloud_button = tk.Button(self.add_game_frame, text="Browse", command=self.browse_source)
-        self.browse_cloud_button.grid(row=1, column=2)
+        self.source_button = tk.Button(self.add_game_frame, text="Browse", command=self.browse_source)
+        self.source_button.grid(row=1, column=2)
 
-        self.dest_label = tk.Label(self.add_game_frame, text="Cloud Folder:")
+        self.dest_label = tk.Label(self.add_game_frame, text="Destination Folder:")
         self.dest_label.grid(row=2, column=0)
         self.dest_entry = tk.Entry(self.add_game_frame, width=50)
         self.dest_entry.grid(row=2, column=1)
         self.dest_button = tk.Button(self.add_game_frame, text="Browse", command=self.browse_cloud_folder)
         self.dest_button.grid(row=2, column=2)
+
+        self.icon_label = tk.Label(self.add_game_frame, text="Game Icon:")
+        self.icon_label.grid(row=3, column=0)
+        self.icon_entry = tk.Entry(self.add_game_frame, width=50)
+        self.icon_entry.grid(row=3, column=1)
+        self.icon_button = tk.Button(self.add_game_frame, text="Add Icon", command=self.add_icon)
+        self.icon_button.grid(row=3, column=2)
+
 
     def setup_linux_ui(self):
         self.source_label = tk.Label(self.add_game_frame, text="Cloud Folder:")
@@ -220,12 +220,30 @@ class SyncDeck:
         name = self.name_entry.get()
         source = self.source_entry.get()
         dest = self.dest_entry.get()
+        icon = self.icon_entry.get()  # Assuming icon_entry contains the icon URL
         if name and source and dest:
-            self.games.append({"name": name, "source": source, "destination": dest})
-            self.games_list.insert(tk.END, f"Name: {name} | Source: {source} -> Destination: {dest}")
+            self.games.append({"name": name, "source": source, "destination": dest, "icon": icon})
+            self.load_games_into_listbox()  # Reload listbox to include icon
             self.clear_entries()
         else:
             messagebox.showwarning("Input Error", "Game name, source, and destination folders must be specified.")
+
+
+
+
+    def update_game(self, index):
+        name = self.name_entry.get()
+        source = self.source_entry.get()
+        dest = self.dest_entry.get()
+        icon = self.icon_entry.get()
+        if name and source and dest:
+            self.games[index] = {"name": name, "source": source, "destination": dest, "icon": icon}
+            self.load_games_into_listbox()
+            self.clear_entries()
+            self.add_button.config(text="Add Game", command=self.add_game)
+        else:
+            messagebox.showwarning("Input Error", "Game name, source, and destination folders must be specified.")
+
 
     def clear_entries(self):
         self.name_entry.delete(0, tk.END)
@@ -342,10 +360,27 @@ class SyncDeck:
                 name = game.get('name', '')
                 source = game.get('source', '')
                 destination = game.get('destination', '')
-                self.games_list.insert(tk.END, f"Name: {name} | Source: {source} -> Destination: {destination}")
+                icon_path = game.get('icon', '')
+
+                if icon_path:
+                    try:
+                        icon = Image.open(icon_path)
+                        icon = icon.resize((20, 20), Image.LANCZOS)
+                        icon = ImageTk.PhotoImage(icon)
+                        self.games_list.insert(tk.END, f"Name: {name} | Source: {source} -> Destination: {destination}", image=icon)
+                        # Keep a reference to the image to prevent it from being garbage collected
+                        self.games_list.image_list.append(icon)
+                    except Exception as e:
+                        print(f"Error loading icon: {e}")
+                        self.games_list.insert(tk.END, f"Name: {name} | Source: {source} -> Destination: {destination}")
+                else:
+                    self.games_list.insert(tk.END, f"Name: {name} | Source: {source} -> Destination: {destination}")
             else:
                 # Handle the case where game is not a dictionary
                 self.games_list.insert(tk.END, f"Invalid game data: {game}")
+
+
+
 
     def get_folders(self, remote, path):
         try:
@@ -429,6 +464,67 @@ class SyncDeck:
     
     def update_remote_label(self, remote_name):
         self.remote_label.config(text=f"Remote: {remote_name}")
+
+    def add_icon(self):
+        filetypes = (
+            ("Icon files", "*.ico"),
+            ("Executable files", "*.exe"),
+            ("Shortcut files", "*.lnk"),
+            ("All files", "*.*")
+        )
+        filepath = filedialog.askopenfilename(title="Select Icon File", filetypes=filetypes)
+        if filepath:
+            icon_folder = os.path.join(os.path.expanduser("~"), "Documents", "SyncDeck", "icons")
+            if not os.path.exists(icon_folder):
+                os.makedirs(icon_folder)
+            icon_path = os.path.join(icon_folder, os.path.basename(filepath) + ".ico")
+            
+            if filepath.endswith(".ico"):
+                shutil.copy(filepath, icon_path)
+            else:
+                icon_path = self.extract_icon(filepath, icon_path)
+
+            self.icon_entry.delete(0, tk.END)
+            self.icon_entry.insert(0, icon_path)
+
+
+
+    def extract_icon(self, filepath, icon_path):
+        ico_x = ctypes.windll.user32.GetSystemMetrics(11)
+        large = (ctypes.c_int * 1)()
+        small = (ctypes.c_int * 1)()
+        num_icons = ctypes.windll.shell32.ExtractIconExW(filepath, 0, large, small, 1)
+        
+        if num_icons > 0:
+            hicon = large[0] if large[0] else small[0]
+            if hicon:
+                hdc = ctypes.windll.user32.GetDC(0)
+                hdc_mem = ctypes.windll.gdi32.CreateCompatibleDC(hdc)
+                hbitmap = ctypes.windll.gdi32.CreateCompatibleBitmap(hdc, ico_x, ico_x)
+                h_old = ctypes.windll.gdi32.SelectObject(hdc_mem, hbitmap)
+                ctypes.windll.user32.DrawIconEx(hdc_mem, 0, 0, hicon, ico_x, ico_x, 0, 0, 3)
+                bitmap_bits = ctypes.create_string_buffer(ico_x * ico_x * 4)
+                ctypes.windll.gdi32.GetBitmapBits(hbitmap, len(bitmap_bits), bitmap_bits)
+                image = Image.frombuffer("RGBA", (ico_x, ico_x), bitmap_bits, "raw", "BGRA", 0, 1)
+                image.save(icon_path)
+                ctypes.windll.gdi32.SelectObject(hdc_mem, h_old)
+                ctypes.windll.gdi32.DeleteObject(hbitmap)
+                ctypes.windll.gdi32.DeleteDC(hdc_mem)
+                ctypes.windll.user32.ReleaseDC(0, hdc)
+        return icon_path
+
+    def save_games(self):
+        with open('sync_config.json', 'w') as f:
+            json.dump(self.games, f, indent=4)
+        messagebox.showinfo("Save Successful", "Game sync configuration saved successfully.")
+
+    def load_games(self):
+        if os.path.exists('sync_config.json'):
+            with open('sync_config.json', 'r') as f:
+                self.games = json.load(f)
+
+
+
 
 if __name__ == "__main__":
     root = tk.Tk()
