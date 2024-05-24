@@ -7,6 +7,33 @@ import json
 import shutil
 import subprocess
 
+class RemoteBrowserDialog(tk.Toplevel):
+    def __init__(self, parent, remote_name):
+        super().__init__(parent)
+        self.title("Browse Remote Folders")
+        self.remote_name = remote_name
+        self.current_path = "/"
+
+        self.folder_tree = ttk.Treeview(self)
+        self.folder_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.folder_tree.bind("<<TreeviewOpen>>", self.populate_folder)
+
+        self.populate_folder()
+
+    def populate_folder(self, event=None):
+        self.folder_tree.delete(*self.folder_tree.get_children())
+        folders = app.get_folders(self.remote_name, self.current_path)
+        for folder in folders:
+            self.folder_tree.insert("", "end", text=folder, values=[f"{self.current_path}/{folder}"])
+
+    def select_folder(self, event):
+        selected_item = self.folder_tree.focus()
+        if selected_item:
+            folder_path = self.folder_tree.item(selected_item, "values")[0]
+            app.dest_entry.delete(0, tk.END)
+            app.dest_entry.insert(0, f"{self.remote_name}:{folder_path}")
+            self.destroy()
+
 class SyncDeck:
     def __init__(self, root):
         self.root = root
@@ -19,16 +46,13 @@ class SyncDeck:
         self.os_label = tk.Label(root, text=f"Detected OS: {self.os_type}")
         self.os_label.pack()
 
-        self.cloud_remote = None  # Initialize cloud_remote attribute
-        self.cloud_type = None  # Initialize cloud_type attribute
+        # Initialize cloud_remote attribute
+        self.cloud_remote = None
 
-        # Check if a remote is already configured
-        self.has_remote = self.check_for_remote()
+        # Button to initiate Cloud login
+        self.cloud_login_button = tk.Button(root, text="Login to Cloud", command=self.login_to_cloud)
+        self.cloud_login_button.pack(pady=5)
 
-        if not self.has_remote:
-            # Button to initiate Cloud login
-            self.cloud_login_button = tk.Button(root, text="Login to Cloud", command=self.login_to_cloud)
-            self.cloud_login_button.pack(pady=5)
 
         self.add_game_frame = tk.Frame(root)
         self.add_game_frame.pack(pady=10)
@@ -60,43 +84,13 @@ class SyncDeck:
 
         self.load_games_into_listbox()
 
-
-    def check_for_remote(self):
-        try:
-            # Running rclone command to list remotes
-            result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True)
-            print(f"rclone listremotes output: {result.stdout}")  # Keep this line for debugging
-            if ": " in result.stdout:
-                print("Remote found")  # Keep this line for debugging
-                return True
-            else:
-                print("No remote found")  # Keep this line for debugging
-                return False
-        except Exception as e:
-            print(f"Error checking for remote: {e}")  # Keep this line for debugging
-            return False
-
-    def browse_cloud_folder(self):
-        if self.has_remote and self.cloud_remote:
-            initial_dir = self.cloud_remote + ":"
-            selected_folder = filedialog.askdirectory(initialdir=initial_dir, title="Select Cloud Folder")
-            if selected_folder:
-                self.dest_entry.delete(0, tk.END)
-                self.dest_entry.insert(0, selected_folder)
-        else:
-            messagebox.showerror("Remote Not Configured", "No remote configured. Please login to Cloud first.")
-
     def setup_windows_ui(self):
         self.source_label = tk.Label(self.add_game_frame, text="Cloud Folder:")
         self.source_label.grid(row=1, column=0)
         self.source_entry = tk.Entry(self.add_game_frame, width=50)
         self.source_entry.grid(row=1, column=1)
-        if self.os_type == "Windows":
-            self.browse_cloud_button = tk.Button(self.add_game_frame, text="Browse", command=self.browse_cloud_folder)
-            self.browse_cloud_button.grid(row=1, column=2)
-        elif self.os_type == "Linux":
-            self.browse_cloud_button = tk.Button(self.add_game_frame, text="Browse", command=self.browse_cloud_folder)
-            self.browse_cloud_button.grid(row=2, column=2)
+        self.browse_cloud_button = tk.Button(self.add_game_frame, text="Browse", command=self.browse_cloud_folder)
+        self.browse_cloud_button.grid(row=1, column=2)
 
         self.dest_label = tk.Label(self.add_game_frame, text="Destination Folder:")
         self.dest_label.grid(row=2, column=0)
@@ -117,7 +111,7 @@ class SyncDeck:
         self.dest_label.grid(row=2, column=0)
         self.dest_entry = tk.Entry(self.add_game_frame, width=50)
         self.dest_entry.grid(row=2, column=1)
-        self.browse_cloud_button = tk.Button(self.add_game_frame, text="Browse", command=self.browse_cloud)
+        self.browse_cloud_button = tk.Button(self.add_game_frame, text="Browse", command=self.browse_cloud_folder)
         self.browse_cloud_button.grid(row=2, column=2)
 
     def browse_source(self):
@@ -132,15 +126,6 @@ class SyncDeck:
             self.dest_entry.delete(0, tk.END)
             self.dest_entry.insert(0, folder)
 
-    def browse_cloud(self):
-        if self.cloud_remote is None:
-            messagebox.showerror("Remote Not Configured", "No remote configured. Please login to Cloud first.")
-        else:
-            try:
-                # Running rclone command to browse the remote
-                subprocess.run(["rclone", "browse", self.cloud_remote], check=True)
-            except Exception as e:
-                messagebox.showerror("Browse Error", f"Error browsing cloud: {e}")
     def add_game(self):
         name = self.name_entry.get()
         source = self.source_entry.get()
@@ -230,22 +215,9 @@ class SyncDeck:
         try:
             # Running rclone config command to initiate Cloud configuration
             subprocess.run(["rclone", "config"], check=True)
-            # Fetching the remote name for later use
-            self.cloud_remote = simpledialog.askstring("Remote Name", "Enter your remote name:")
-            print("Remote name:", self.cloud_remote)  # Debugging print
-            if self.cloud_remote is None:
-                messagebox.showwarning("Remote Name", "No remote name entered. Please try again.")
-                return
-            self.cloud_type = simpledialog.askstring("Remote Type", "Enter your remote type:")
-            if self.cloud_type is None:
-                messagebox.showwarning("Remote Type", "No remote type entered. Please try again.")
-                return
             messagebox.showinfo("Login Successful", "Successfully logged in to Cloud.")
         except subprocess.CalledProcessError as e:
             messagebox.showerror("Login Error", f"Error logging in to Cloud: {e.stderr.decode()}")
-
-
-
 
     def sync_folders(self, source, destination):
         if not os.path.exists(destination):
@@ -275,6 +247,42 @@ class SyncDeck:
         self.games_list.delete(0, tk.END)
         for game in self.games:
             self.games_list.insert(tk.END, f"Name: {game['name']} | Source: {game['source']} -> Destination: {game['destination']}")
+
+
+    def get_folders(self, remote, path):
+        try:
+            # Run the 'rclone ls' command to list the contents of the remote path
+            result = subprocess.run(['rclone', 'ls', f'{remote}:{path}'], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                # Split the output by newline to get individual entries
+                entries = result.stdout.strip().split('\n')
+                
+                # Filter out non-directory entries
+                folders = [entry.split('/')[-1] for entry in entries if entry.endswith('/')]
+                
+                return folders
+            else:
+                print(f"Error listing folders: {result.stderr}")
+                return []
+        except Exception as e:
+            print(f"Error getting folders: {e}")
+            return []
+    def browse_cloud_folder(self):
+        if self.cloud_remote:
+            browser_dialog = RemoteBrowserDialog(self.root, self.cloud_remote)
+            self.root.wait_window(browser_dialog)
+        else:
+            messagebox.showerror("Remote Not Configured", "No remote configured. Please login to Cloud first.")
+    def login_to_cloud(self):
+        try:
+            # Running rclone config command to initiate Cloud configuration
+            subprocess.run(["rclone", "config"], check=True)
+            self.cloud_remote = simpledialog.askstring("Remote Name", "Enter your remote name:")
+            messagebox.showinfo("Login Successful", "Successfully logged in to Cloud.")
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Login Error", f"Error logging in to Cloud: {e.stderr.decode()}")
+
 
 if __name__ == "__main__":
     root = tk.Tk()
