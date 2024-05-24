@@ -1,8 +1,12 @@
 [
     {
         "name": "Red Dead Redemption 2",
-        "source": "X:/Documents/Rockstar Games/Red Dead Redemption 2/Settings",
-        "destination": "dropbox:SyncDeck/run/media/mmcblk0p1/hydra-pfx/drive_c/users/deck/Documents/Rockstar Games/Red Dead Redemption 2/Settings",
-        "icon": "C:\\Users\\shift\\Documents\\SyncDeck\\icons\\RDR2.exe.ico"
+        "source": "C:/Users/shift/Documents/Rockstar Games/Red Dead Redemption 2/Settings",
+        "destination": "dropbox:SyncDeck/run/media/mmcblk0p1/hydra-pfx/drive_c/users/deck/Documents/Rockstar Games/Red Dead Redemption 2/Settings"
+    },
+    {
+        "name": "Hades",
+        "source": "X:/Documents/Saved Games/Hades",
+        "destination": "dropbox:SyncDeck/run/media/mmcblk0p1/hydra-pfx/drive_c/users/deck/Documents/Saved Games/Hades"
     }
 ]

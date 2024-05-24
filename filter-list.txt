@@ -1,0 +1,4 @@
+- sga_vulkan_final_init.pipelineMarkerFile
+- sga_vulkan_final_init.vkPipelineCacheHeaderWindows
+- sga_vulkan_final_init.vkPipelineCacheWindows
+- sga_vulkan_final_init.vkWarmupCacheWindows
