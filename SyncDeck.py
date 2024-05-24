@@ -153,7 +153,7 @@ class SyncDeck:
         self.sync_button = tk.Button(root, text="Sync Game", command=self.sync_game)
         self.sync_button.pack(pady=5)
 
-        self.save_button = tk.Button(root, text="Save Configuration", command=self.save_games)
+        self.save_button = tk.Button(root, text="Save GameList", command=self.save_games)
         self.save_button.pack(pady=5)
 
         self.load_games_into_listbox()
